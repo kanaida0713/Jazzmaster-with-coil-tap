@@ -30,6 +30,7 @@ import org.diylc.components.guitar.HumbuckerPickup;
 import org.diylc.components.guitar.JazzBassPickup;
 import org.diylc.components.guitar.P90Pickup;
 import org.diylc.components.guitar.PBassPickup;
+import org.diylc.components.guitar.Jazzmaster;
 import org.diylc.components.guitar.SingleCoilPickup;
 import org.diylc.components.guitar.StingrayBassPickup;
 import org.diylc.components.passive.*;
@@ -67,6 +68,7 @@ public class GuitarDiagramAnalyzer extends AbstractNetlistAnalyzer implements IN
     POT_TYPES.add(MiniaturePotentiometer.class.getCanonicalName());
 
     PICKUP_TYPES.add(SingleCoilPickup.class.getCanonicalName());
+    PICKUP_TYPES.add(Jazzmaster.class.getCanonicalName());
     PICKUP_TYPES.add(HumbuckerPickup.class.getCanonicalName());
     PICKUP_TYPES.add(P90Pickup.class.getCanonicalName());
     PICKUP_TYPES.add(JazzBassPickup.class.getCanonicalName());
@@ -175,6 +177,7 @@ public class GuitarDiagramAnalyzer extends AbstractNetlistAnalyzer implements IN
       noiseCount = 0;
 
       // analyze hum-cancellation and phase
+      Set<IDIYComponent<?>> countedJazzmasters = new HashSet<IDIYComponent<?>>();
       pickupTree.walk(new ITreeWalker() {
 
         @Override
@@ -182,6 +185,10 @@ public class GuitarDiagramAnalyzer extends AbstractNetlistAnalyzer implements IN
 
         @Override
         public void visit(TreeLeaf l) {
+          if (l.getComponent() instanceof Jazzmaster) {
+          if (!countedJazzmasters.add(l.getComponent()))
+          return;
+        }
           String s = l.toString().toLowerCase();
           boolean isStacked = s.contains("stacked");
 
@@ -226,15 +233,46 @@ public class GuitarDiagramAnalyzer extends AbstractNetlistAnalyzer implements IN
             } else if ((nTree == null && sTree != null) || (nTree != null && sTree == null)) {
               notes.add("'" + pickup.getName() + "' pickup wired in coil-split mode");
             }
-          } else {
-            TreeLeaf leaf = new TreeLeaf(pickup, 1, 2);
-            Tree t = tree.locate(leaf, false);
-            if (t != null) {
-              pickupRoots.put(pickup, t);
+            } else {
+            if (pickup instanceof Jazzmaster
+              && ((Jazzmaster) pickup).getWiringType() == Jazzmaster.WiringType.TAPPED) {
+
+            TreeLeaf firstLeaf = new TreeLeaf(pickup, 1, 2);
+            TreeLeaf secondLeaf = new TreeLeaf(pickup, 2, 3);
+
+            Tree firstTree = tree.locate(firstLeaf, false);
+            Tree secondTree = tree.locate(secondLeaf, false);
+
+            if (firstTree != null && secondTree != null) {
+
+              Tree parent = tree.findCommonParent(firstTree, secondTree);
+
+              if (parent != null) {
+                pickupRoots.put(pickup, parent);
+                notes.add("'" + pickup.getName() + "' is using FULL winding");
+              }
+
+            } else if (firstTree != null) {
+
+              pickupRoots.put(pickup, firstTree);
+              notes.add("'" + pickup.getName() + "' is using TAP winding");
+
+            } else if (secondTree != null) {
+
+              pickupRoots.put(pickup, secondTree);
+              notes.add("'" + pickup.getName() + "' is using Tap-to-Finish winding");
             }
+
+            } else {
+              TreeLeaf leaf = new TreeLeaf(pickup, 1, 2);
+              Tree t = tree.locate(leaf, false);
+              if (t != null) {
+                pickupRoots.put(pickup, t);
+              }
           }
         }
       }
+    }
 
       // figure out how pickups are wired between them
       if (pickupRoots.size() > 1) {
@@ -262,14 +300,17 @@ public class GuitarDiagramAnalyzer extends AbstractNetlistAnalyzer implements IN
       else
         notes.add("This configuration is NOT hum-cancelling");
 
-      if (positiveCount > 1 || negativeCount > 1 || (positiveCount == 1 && negativeCount == 1)) {
+    Set<IDIYComponent<?>> phasePickups = pickupTree.extractComponents(PICKUP_TYPES);
+      if (phasePickups.size() > 1 &&
+        (positiveCount > 1 || negativeCount > 1 || (positiveCount == 1 && negativeCount == 1))) {
         boolean inPhase =
-            (positiveCount == 0 && negativeCount > 0) || (positiveCount > 0 && negativeCount == 0);
-        if (inPhase)
-          notes.add("All pickup coils are wired in-phase");
-        else
-          notes.add("Some pickup coils are wired OUT-of-phase");
-      }
+        (positiveCount == 0 && negativeCount > 0) ||
+        (positiveCount > 0 && negativeCount == 0);
+      if (inPhase)
+        notes.add("All pickup coils are wired in-phase");
+      else
+        notes.add("Some pickup coils are wired OUT-of-phase");
+}
 
       // locate volume and tone pots
       Map<IDIYComponent<?>, List<IDIYComponent<?>>> volPotPickupMap =
@@ -389,12 +430,20 @@ public class GuitarDiagramAnalyzer extends AbstractNetlistAnalyzer implements IN
       Map<IDIYComponent<?>, TrebleBleed> volPotTrebleBleedMap,
       Map<IDIYComponent<?>, List<IDIYComponent<?>>> volPotPickupMap,
       Map<IDIYComponent<?>, List<IDIYComponent<?>>> volPotPickupReverseMap) {
-    TreeLeaf leaf1 = new TreeLeaf(pot, 0, 1);
-    TreeLeaf leaf2 = new TreeLeaf(pot, 1, 2);
-    Tree tree1 = tree.locate(leaf1, false);
-    Tree tree2 = tree.locate(leaf2, false);
+   TreeLeaf leaf1 = new TreeLeaf(pot, 0, 1);
+   TreeLeaf leaf2 = new TreeLeaf(pot, 1, 2);
+   Tree tree1 = tree.locate(leaf1, false);
+   Tree tree2 = tree.locate(leaf2, false);
+   Tree tree3 = null;
+   Tree tree4 = null;
+    if (pot.getControlPointCount() == 6) {
+    TreeLeaf leaf3 = new TreeLeaf(pot, 3, 4);
+    TreeLeaf leaf4 = new TreeLeaf(pot, 4, 5);
+    tree3 = tree.locate(leaf3, false);
+    tree4 = tree.locate(leaf4, false);
+}
 
-    if ((tree1 == null && tree2 != null) || (tree1 != null && tree2 == null)) {
+if ((tree1 == null && tree2 != null) || (tree1 != null && tree2 == null)) {
       boolean tonePotReversed = tree1 != null;
       Tree t = tree1 == null ? tree2 : tree1;
       Tree p = tree.findParent(t);
@@ -454,6 +503,39 @@ public class GuitarDiagramAnalyzer extends AbstractNetlistAnalyzer implements IN
         pickupList.add(r.getKey());
       }
     }
+    if (tree3 != null && tree4 != null) {
+  for (Map.Entry<IDIYComponent<?>, Tree> r : pickupRoots.entrySet()) {
+    Tree commonParent3 = tree.findCommonParent(tree3, r.getValue());
+    Tree commonParent4 = tree.findCommonParent(tree4, r.getValue());
+
+    if (commonParent3 != null && commonParent4 != null
+        && commonParent3.getConnectionType() == TreeConnectionType.Series
+        && commonParent4.getConnectionType() == TreeConnectionType.Parallel) {
+
+      List<IDIYComponent<?>> pickupList = volPotPickupMap.get(pot);
+
+      if (pickupList == null) {
+        pickupList = new ArrayList<IDIYComponent<?>>();
+        volPotPickupMap.put(pot, pickupList);
+      }
+
+      pickupList.add(r.getKey());
+
+    } else if (commonParent3 != null && commonParent4 != null
+        && commonParent3.getConnectionType() == TreeConnectionType.Parallel
+        && commonParent4.getConnectionType() == TreeConnectionType.Series) {
+
+      List<IDIYComponent<?>> pickupList = volPotPickupReverseMap.get(pot);
+
+      if (pickupList == null) {
+        pickupList = new ArrayList<IDIYComponent<?>>();
+        volPotPickupReverseMap.put(pot, pickupList);
+      }
+
+      pickupList.add(r.getKey());
+    }
+  }
+}
   }
 
   private void locateTrebleBleed(Tree tree,
