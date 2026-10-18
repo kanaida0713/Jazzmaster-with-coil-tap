@@ -183,8 +183,22 @@ public class Tree {
 
     List<Tree> children = getOrderedChildren();
 
-    List<List<String>> childrenAscii =
-        children.stream().map(c -> c.toAsciiLines()).collect(Collectors.toList());
+   List<List<String>> childrenAscii = new ArrayList<List<String>>();
+
+for (int i = 0; i < children.size(); i++) {
+  Tree child = children.get(i);
+
+  if (TreeConnectionType.Series.equals(connectionType)
+      && i + 1 < children.size()
+      && isJazzmasterFullWindingPair(child, children.get(i + 1))) {
+
+    childrenAscii.add(child.toAsciiLines());
+    i++; // skip second section of the same Jazzmaster full winding
+
+  } else {
+    childrenAscii.add(child.toAsciiLines());
+  }
+}
 
     if (TreeConnectionType.Series.equals(connectionType)) {
       return TreeAsciiUtil.concatenateMultiLineSerial(
@@ -193,6 +207,40 @@ public class Tree {
       return TreeAsciiUtil.concatenateMultiLineParallel(childrenAscii);
     }
   }
+
+  private boolean isJazzmasterFullWindingPair(Tree first, Tree second) {
+  if (first.leaf == null || second.leaf == null)
+    return false;
+
+  TreeLeaf a = first.leaf;
+  TreeLeaf b = second.leaf;
+
+  if (a.getComponent() != b.getComponent())
+    return false;
+
+  if (!"org.diylc.components.guitar.Jazzmaster"
+      .equals(a.getComponent().getClass().getCanonicalName()))
+    return false;
+
+  boolean aFirstSection =
+      (a.getPointIndex1() == 1 && a.getPointIndex2() == 2)
+      || (a.getPointIndex1() == 2 && a.getPointIndex2() == 1);
+
+  boolean aSecondSection =
+      (a.getPointIndex1() == 2 && a.getPointIndex2() == 3)
+      || (a.getPointIndex1() == 3 && a.getPointIndex2() == 2);
+
+  boolean bFirstSection =
+      (b.getPointIndex1() == 1 && b.getPointIndex2() == 2)
+      || (b.getPointIndex1() == 2 && b.getPointIndex2() == 1);
+
+  boolean bSecondSection =
+      (b.getPointIndex1() == 2 && b.getPointIndex2() == 3)
+      || (b.getPointIndex1() == 3 && b.getPointIndex2() == 2);
+
+  return (aFirstSection && bSecondSection)
+      || (aSecondSection && bFirstSection);
+}
 
   @Override
   protected Object clone() throws CloneNotSupportedException {
@@ -340,4 +388,4 @@ public class Tree {
 
     void visit(TreeLeaf l);
   }
-}
+} 
