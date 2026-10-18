@@ -73,21 +73,26 @@ public abstract class AbstractNetlistAnalyzer {
       return;
     }
 
-    Group groupA = findGroup(netlist, nodeA);
+Group groupA = findGroup(netlist, nodeA);
 
-    if (groupA == null)
-      return;
+List<Node> nodesAtA = new ArrayList<Node>();
 
-    if (groupA.getNodes().contains(nodeB)) {
-      concurrentPaths.add(currentPath);
-      return;
-    }
+if (groupA == null) {
+  nodesAtA.add(nodeA);
+} else {
+  nodesAtA.addAll(groupA.getNodes());
+}
 
-    visited.addAll(groupA.getNodes());
+if (nodesAtA.contains(nodeB)) {
+  concurrentPaths.add(currentPath);
+  return;
+}
 
-    List<Tree> newConcurrentPaths = new ArrayList<Tree>();
+visited.addAll(nodesAtA);
 
-    for (Node n : groupA.getNodes()) {
+List<Tree> newConcurrentPaths = new ArrayList<Tree>();
+
+    for (Node n : nodesAtA) {
       IDIYComponent<?> c = n.getComponent();
       for (int i = 0; i < c.getControlPointCount(); i++) {
         if (i != n.getPointIndex() && c.getInternalLinkName(i, n.getPointIndex()) != null) {
